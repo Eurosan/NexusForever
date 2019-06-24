@@ -17,7 +17,7 @@ INSERT INTO `property_base` (`type`, `property`, `value`, `note`) VALUES
 	(0, 7, 200, 'Player - Base HP per Level'),
 	(0, 9, 500, 'Player - Base Endurance'),
 	(0, 35, 18, 'Player - Base Assault Rating per Level'),
-	(0, 36, 18, 'Player - Base Assault Rating per Level'),
+	(0, 36, 18, 'Player - Base Support Rating per Level'),
 	(0, 41, 0, 'Player - Shield Capacity Base'),
 	(0, 100, 1, 'Player - Base Movement Speed'),
 	(0, 130, 0.8, 'Player - Base Gravity Multiplier');
