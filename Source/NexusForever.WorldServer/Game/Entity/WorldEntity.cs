@@ -20,6 +20,7 @@ namespace NexusForever.WorldServer.Game.Entity
         public EntityCreateFlag CreateFlags { get; set; }
         public Vector3 Rotation { get; set; } = Vector3.Zero;
         public Dictionary<Property, PropertyValue> Properties { get; } = new Dictionary<Property, PropertyValue>();
+        private HashSet<Property> DirtyProperties { get; } = new HashSet<Property>();
 
         public uint DisplayInfo { get; protected set; }
         public ushort OutfitInfo { get; protected set; }
@@ -75,6 +76,8 @@ namespace NexusForever.WorldServer.Game.Entity
 
             foreach (EntityStat statModel in model.EntityStat)
                 stats.Add((Stat)statModel.Stat, new StatValue(statModel));
+
+            SetBaseProperties();
         }
 
         public override void OnAddToMap(BaseMap map, uint guid, Vector3 vector)
@@ -95,12 +98,19 @@ namespace NexusForever.WorldServer.Game.Entity
         public override void Update(double lastTick)
         {
             MovementManager.Update(lastTick);
+            
+            var propertyUpdatePacket = BuildPropertyUpdates();
+            if (propertyUpdatePacket == null)
+                return;
+
+            EnqueueToVisible(propertyUpdatePacket, true);
         }
 
         protected abstract IEntityModel BuildEntityModel();
 
         public virtual ServerEntityCreate BuildCreatePacket()
         {
+            DirtyProperties.Clear();
             return new ServerEntityCreate
             {
                 Guid         = Guid,
@@ -135,16 +145,46 @@ namespace NexusForever.WorldServer.Game.Entity
         {
             // deliberately empty
         }
+        
+        public virtual ServerEntityPropertiesUpdate BuildPropertyUpdates()
+        {
+            if (!HasPendingPropertyChanges)
+                return null;
+            HashSet<Property> properties = new HashSet<Property>();
+            ServerEntityPropertiesUpdate propertyUpdatePacket = new ServerEntityPropertiesUpdate()
+            {
+                UnitId = Guid
+            };
+            // Start at the back of the list
+            foreach (Property propertyUpdate in DirtyProperties)
+            {
+                if (!Properties.TryGetValue(propertyUpdate, out PropertyValue propertyValue) ||
+                    propertyValue == null) continue;
+                propertyUpdatePacket.Properties.Add(propertyValue);
+            }
 
-        protected void SetProperty(Property property, float value, float baseValue = 0.0f)
+            DirtyProperties.Clear();
+            return propertyUpdatePacket;
+        }
+
+        protected virtual void SetBaseProperties()
+        {
+            // Delibrartely empty
+        }
+
+        public bool HasPendingPropertyChanges => DirtyProperties.Count != 0;
+
+        public void SetProperty(Property property, float value, float baseValue = 0.0f)
         {
             if (Properties.ContainsKey(property))
                 Properties[property].Value = value;
             else
                 Properties.Add(property, new PropertyValue(property, baseValue, value));
+
+            DirtyProperties.Add(property);
         }
 
-        protected float? GetPropertyValue(Property property)
+        public float? GetPropertyValue(Property property)
         {
             return Properties.ContainsKey(property) ? Properties[property].Value : default;
         }

@@ -4,6 +4,10 @@ using System.Reflection;
 using NexusForever.Shared.GameTable;
 using NexusForever.Shared.GameTable.Model;
 using NexusForever.WorldServer.Database.Character;
+using NexusForever.WorldServer.Database.Character.Model;
+using NexusForever.WorldServer.Database.World;
+using NexusForever.WorldServer.Database.World.Model;
+using NexusForever.WorldServer.Game.Entity;
 using NexusForever.WorldServer.Game.Entity.Static;
 
 namespace NexusForever.WorldServer.Game
@@ -32,9 +36,13 @@ namespace NexusForever.WorldServer.Game
         private static ulong nextMailId;
 
         private static ImmutableDictionary<uint, ImmutableList<CharacterCustomizationEntry>> characterCustomisations;
+        private static ImmutableList<PropertyValue> characterBaseProperties;
+        private static ImmutableDictionary<Class, ImmutableList<PropertyValue>> characterClassBaseProperties;
 
         private static ImmutableDictionary<ItemSlot, ImmutableList<EquippedItem>> equippedItems;
         private static ImmutableDictionary<uint, ImmutableList<ItemDisplaySourceEntryEntry>> itemDisplaySourcesEntry;
+
+        private static ImmutableDictionary</*zoneId*/uint, /*tutorialId*/uint> zoneTutorials;
 
         public static void Initialise()
         {
@@ -43,9 +51,11 @@ namespace NexusForever.WorldServer.Game
             nextMailId      = CharacterDatabase.GetNextMailId() + 1ul;
 
             CacheCharacterCustomisations();
+            CacheCharacterBaseProperties();
             CacheInventoryEquipSlots();
             CacheInventoryBagCapacities();
             CacheItemDisplaySourceEntries();
+            CacheTutorials();
         }
 
         private static void CacheCharacterCustomisations()
@@ -63,6 +73,18 @@ namespace NexusForever.WorldServer.Game
             characterCustomisations = entries.ToImmutableDictionary(e => e.Key, e => e.Value.ToImmutableList());
         }
 
+        private static void CacheCharacterBaseProperties()
+        {
+            var entries = ImmutableList.CreateBuilder<PropertyValue>();
+            foreach (PropertyBase propertyModel in CharacterDatabase.GetProperties(0))
+            {
+                var newPropValue = new PropertyValue((Property)propertyModel.Property, propertyModel.Value, propertyModel.Value);
+                entries.Add(newPropValue);
+            }
+
+            characterBaseProperties = entries.ToImmutable();
+        }
+
         private static void CacheInventoryEquipSlots()
         {
             var entries = new Dictionary<ItemSlot, List<EquippedItem>>();
@@ -77,7 +99,6 @@ namespace NexusForever.WorldServer.Game
                     entries[slot].Add(attribute.Slot);
                 }
             }
-
             equippedItems = entries.ToImmutableDictionary(e => e.Key, e => e.Value.ToImmutableList());
         }
 
@@ -110,6 +131,21 @@ namespace NexusForever.WorldServer.Game
             itemDisplaySourcesEntry = entries.ToImmutableDictionary(e => e.Key, e => e.Value.ToImmutableList());
         }
 
+        private static void CacheTutorials()
+        {
+            var zoneEntries =  ImmutableDictionary.CreateBuilder<uint, uint>();
+            foreach (Tutorial tutorial in WorldDatabase.GetTutorialTriggers())
+            {
+                if (tutorial.TriggerId == 0) // Don't add Tutorials with no trigger ID
+                    continue;
+
+                if (tutorial.Type == 29 && !zoneEntries.ContainsKey(tutorial.TriggerId))
+                    zoneEntries.Add(tutorial.TriggerId, tutorial.Id);
+            }
+
+            zoneTutorials = zoneEntries.ToImmutable();
+        }
+
         /// <summary>
         /// Returns an <see cref="ImmutableList{T}"/> containing all <see cref="CharacterCustomizationEntry"/>'s for the supplied race, sex, label and value.
         /// </summary>
@@ -117,6 +153,15 @@ namespace NexusForever.WorldServer.Game
         {
             uint key = (value << 24) | (label << 16) | (sex << 8) | race;
             return characterCustomisations.TryGetValue(key, out ImmutableList<CharacterCustomizationEntry> entries) ? entries : null;
+        }
+
+        /// <summary>
+        /// Returns an <see cref="ImmutableList[T]"/> containing all base <see cref="PropertyValue"/> for any character
+        /// </summary>
+        /// <returns></returns>
+        public static ImmutableList<PropertyValue> GetCharacterBaseProperties()
+        {
+            return characterBaseProperties;
         }
 
         /// <summary>
@@ -133,6 +178,14 @@ namespace NexusForever.WorldServer.Game
         public static ImmutableList<ItemDisplaySourceEntryEntry> GetItemDisplaySource(uint itemSource)
         {
             return itemDisplaySourcesEntry.TryGetValue(itemSource, out ImmutableList<ItemDisplaySourceEntryEntry> entries) ? entries : null;
+        }
+
+        /// <summary>
+        /// Returns a Tutorial ID if it's found in the Zone Tutorials cache
+        /// </summary>
+        public static uint GetTutorialIdForZone(uint zoneId)
+        {
+            return zoneTutorials.TryGetValue(zoneId, out uint tutorialId) ? tutorialId : 0;
         }
     }
 }
